@@ -748,6 +748,32 @@ async function executeBrowser(input) {
     const baselinePageText = norm((await page.locator('body').innerText().catch(() => '')).slice(0, 12000));
     const baseline = { pageText: baselinePageText, errorText: baselinePageText, url: page.url() };
 
+
+    let submitRequestSeen = false;
+    let submitRequestUrl = '';
+    let submitResponseStatus = 0;
+
+    page.on('request', (req) => {
+      if (
+        req.method() === 'POST' &&
+        ['xhr', 'fetch', 'document'].includes(req.resourceType())
+      ) {
+        submitRequestSeen = true;
+        submitRequestUrl = req.url();
+      }
+    });
+
+    page.on('response', (res) => {
+      const req = res.request();
+
+      if (
+        req.method() === 'POST' &&
+        ['xhr', 'fetch', 'document'].includes(req.resourceType())
+      ) {
+        submitResponseStatus = res.status();
+      }
+    });
+    
     // Zone ambiguë : à partir de ce point, aucune relance automatique n'est sûre.
     submitClicked = true;
     logMeta({ ...meta, step: 'CLICK_COMMAND_EMITTED' });
@@ -818,6 +844,8 @@ async function executeBrowser(input) {
       final_url: outcome.finalUrl,
       form_found: true,
       filled_mappings: filled,
+      error_signal:
+      `POST_SEEN=${submitRequestSeen};STATUS=${submitResponseStatus};URL=${safeFinalUrl(submitRequestUrl)}`
     });
   } catch (e) {
     const reason = clean(e?.message) || 'BROWSER_WORKER_ERROR';
